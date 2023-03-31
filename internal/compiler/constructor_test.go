@@ -32,9 +32,12 @@ func TestConstructor(t *testing.T) {
 		}
 	)
 
-	var closer = func() error {
-		return nil
-	}
+	var (
+		closer = func() error {
+			return nil
+		}
+		oopsErr = errors.New("oops")
+	)
 
 	var testCases = []TestCase{{
 		Constructor: []string{},
@@ -47,6 +50,14 @@ func TestConstructor(t *testing.T) {
 			return 0, 0, 0, 0
 		},
 		Error: compiler.ErrInvalidConstructor,
+	}, {
+		Constructor: func() int {
+			panic("oops")
+		},
+		Result: &Result{
+			Error: compiler.ErrPanicked,
+		},
+		Type: reflect.TypeOf(0),
 	}, {
 		Constructor: func(a, b int) int {
 			return a + b
@@ -68,11 +79,11 @@ func TestConstructor(t *testing.T) {
 		Type: reflect.TypeOf(1),
 	}, {
 		Constructor: func() (int, error) {
-			return 0, errors.New("oops")
+			return 0, oopsErr
 		},
 		Dependencies: []*compiler.Dependency{},
 		Result: &Result{
-			Error: errors.New("oops"),
+			Error: oopsErr,
 			Value: reflect.ValueOf(0),
 		},
 		Type: reflect.TypeOf(0),
@@ -98,12 +109,12 @@ func TestConstructor(t *testing.T) {
 		Type: reflect.TypeOf(0),
 	}, {
 		Constructor: func() (int, func() error, error) {
-			return 0, closer, errors.New("oops")
+			return 0, closer, oopsErr
 		},
 		Dependencies: []*compiler.Dependency{},
 		Result: &Result{
 			Closer: closer,
-			Error:  errors.New("oops"),
+			Error:  oopsErr,
 			Value:  reflect.ValueOf(0),
 		},
 		Type: reflect.TypeOf(0),
@@ -164,9 +175,12 @@ func TestConstructor(t *testing.T) {
 			}, "Dependencies not equal")
 
 			var v, c, e = cmp.Create(testCase.Dependencies...)
-			require.Equal(t, testCase.Result.Error, e)
-			require.Equal(t, testCase.Result.Value.Interface(), v.Interface())
+			if v.IsValid() {
+				require.Equal(t, testCase.Result.Value.Interface(), v.Interface())
+			}
+
 			require.Equal(t, reflect.ValueOf(testCase.Result.Closer).Pointer(), reflect.ValueOf(c).Pointer())
+			require.ErrorIs(t, e, testCase.Result.Error)
 		})
 	}
 }

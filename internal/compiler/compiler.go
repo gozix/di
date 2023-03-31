@@ -4,7 +4,10 @@
 
 package compiler
 
-import "reflect"
+import (
+	"errors"
+	"reflect"
+)
 
 type (
 	Closer = func() error
@@ -22,3 +25,5 @@ type (
 		Value reflect.Value
 	}
 )
+
+var ErrPanicked = errors.New("panicked")

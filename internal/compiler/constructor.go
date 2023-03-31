@@ -61,7 +61,7 @@ func NewConstructor(fn any) (*Constructor, error) {
 	return c, nil
 }
 
-func (c *Constructor) Create(dependencies ...*Dependency) (reflect.Value, Closer, error) {
+func (c *Constructor) Create(dependencies ...*Dependency) (_ reflect.Value, _ Closer, err error) {
 	var args = make([]reflect.Value, 0, len(dependencies))
 	for i, dep := range dependencies {
 		if c.vct && i == c.lin {
@@ -75,7 +75,11 @@ func (c *Constructor) Create(dependencies ...*Dependency) (reflect.Value, Closer
 		args = append(args, dep.Value)
 	}
 
-	var out = c.val.Call(args)
+	var out []reflect.Value
+	if out, err = c.call(args); err != nil {
+		return reflect.Value{}, nil, err
+	}
+
 	switch c.beh {
 	case behaviourValue:
 		return out[0], nil, nil
@@ -106,6 +110,16 @@ func (c *Constructor) Dependencies() []*Dependency {
 
 func (c *Constructor) Type() reflect.Type {
 	return c.typ.Out(0)
+}
+
+func (c *Constructor) call(args []reflect.Value) (_ []reflect.Value, err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			err = fmt.Errorf("unable create because the constructor %w : %+v", ErrPanicked, recovered)
+		}
+	}()
+
+	return c.val.Call(args), nil
 }
 
 func (c *Constructor) guessBehaviour() {
