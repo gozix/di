@@ -109,7 +109,7 @@ func (c *container) Close() (err error) {
 
 	for i := len(closers) - 1; i >= 0; i-- {
 		if err = closers[i](); err != nil {
-			return fmt.Errorf("unable close container : %w", err)
+			return fmt.Errorf("unable to close container : %w", err)
 		}
 	}
 
@@ -126,13 +126,11 @@ func (c *container) Has(value Type, modifiers ...Modifier) bool {
 }
 
 func (c *container) Resolve(target Value, modifiers ...Modifier) (err error) {
-	var rv = reflect.ValueOf(target)
-
 	c.mux.Lock()
-	err = c.resolve(&rv, cycle.New(), modifiers)
-	c.mux.Unlock()
+	defer c.mux.Unlock()
 
-	if err != nil {
+	var rv = reflect.ValueOf(target)
+	if err = c.resolve(&rv, cycle.New(), modifiers); err != nil {
 		return fmt.Errorf("%s : %w", runtime.Caller(0), err)
 	}
 
@@ -140,6 +138,12 @@ func (c *container) Resolve(target Value, modifiers ...Modifier) (err error) {
 }
 
 func (c *container) resolve(tv *reflect.Value, cycle *cycle.Cycle, modifiers []Modifier) (err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			err = fmt.Errorf("unable to resolve target because the container panicked: %+v", recovered)
+		}
+	}()
+
 	if tv.Kind() != reflect.Pointer && tv.Kind() != reflect.Slice {
 		if tv.IsValid() {
 			return NewTypeError(tv.Type(), ErrMustBeSliceOrPointer)
@@ -237,9 +241,15 @@ func (c *container) resolveDependency(cycle *cycle.Cycle, dep *compiler.Dependen
 func (c *container) set(tv *reflect.Value, sv reflect.Value) {
 	switch tv.Elem().Kind() {
 	case reflect.Slice:
-		tv.Elem().Set(
-			reflect.Append(tv.Elem(), sv),
-		)
+		if sv.Kind() == reflect.Slice {
+			tv.Elem().Set(
+				reflect.AppendSlice(tv.Elem(), sv),
+			)
+		} else {
+			tv.Elem().Set(
+				reflect.Append(tv.Elem(), sv),
+			)
+		}
 	default:
 		tv.Elem().Set(sv)
 	}

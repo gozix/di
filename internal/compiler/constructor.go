@@ -115,7 +115,7 @@ func (c *Constructor) Type() reflect.Type {
 func (c *Constructor) call(args []reflect.Value) (_ []reflect.Value, err error) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
-			err = fmt.Errorf("unable create because the constructor %w : %+v", ErrPanicked, recovered)
+			err = fmt.Errorf("unable to create because the constructor %w : %+v", ErrPanicked, recovered)
 		}
 	}()
 
