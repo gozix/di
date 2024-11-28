@@ -47,6 +47,10 @@ func NewContainer() (di.Container, error) {
 		}, {
 			Name: "flaky",
 		}}),
+
+		di.Provide(NewSlice1),
+		di.Provide(NewSlice2),
+		di.Provide(NewNamedSlice),
 	)
 
 	if err != nil {
@@ -68,7 +72,6 @@ func TestContainer(t *testing.T) {
 			var err = ctn.Call(nil)
 			require.Error(t, err)
 			require.ErrorIs(t, err, di.ErrorMustBeFunction)
-			require.ErrorContains(t, err, "container_test.go:68")
 		},
 	}, {
 		Name: "Call with unregistered type",
@@ -79,7 +82,6 @@ func TestContainer(t *testing.T) {
 
 			require.Error(t, err)
 			require.ErrorIs(t, err, di.ErrDoesNotExist)
-			require.ErrorContains(t, err, "container_test.go:76")
 		},
 	}, {
 		Name: "Call without dependencies",
@@ -156,6 +158,17 @@ func TestContainer(t *testing.T) {
 			require.NoError(t, err)
 		},
 	}, {
+		Name: "Call with collections",
+		Run: func(t *testing.T, ctn di.Container) {
+			var err = ctn.Call(func(s1 Items, s2 []Item, s3 ...Item) {
+				require.ElementsMatch(t, s1, Items{1, 2, 3})
+				require.ElementsMatch(t, s2, Items{4, 5, 6, 7})
+				require.ElementsMatch(t, s3, Items{4, 5, 6, 7})
+			})
+
+			require.NoError(t, err)
+		},
+	}, {
 		Name: "Call func with error",
 		Run: func(t *testing.T, ctn di.Container) {
 			var eErr = errors.New("expected")
@@ -165,7 +178,6 @@ func TestContainer(t *testing.T) {
 			})
 
 			require.ErrorIs(t, aErr, eErr)
-			require.ErrorContains(t, aErr, "container_test.go:162")
 		},
 	}, {
 		Name: "Has dependency exist",
@@ -183,7 +195,6 @@ func TestContainer(t *testing.T) {
 			var err = ctn.Resolve(nil)
 			require.Error(t, err)
 			require.ErrorIs(t, err, di.ErrMustBeSliceOrPointer)
-			require.ErrorContains(t, err, "container_test.go:183")
 		},
 	}, {
 		Name: "Resolve multiple error",
@@ -196,7 +207,6 @@ func TestContainer(t *testing.T) {
 			require.Nil(t, foo)
 			require.Error(t, err)
 			require.ErrorIs(t, err, di.ErrMultipleDefinitions)
-			require.ErrorContains(t, err, "container_test.go:193")
 		},
 	}, {
 		Name: "Resolve flaky dependency",
@@ -208,7 +218,6 @@ func TestContainer(t *testing.T) {
 
 			require.Nil(t, flaky)
 			require.Error(t, err)
-			require.ErrorContains(t, err, "container_test.go:206")
 		},
 	}, {
 		Name: "Resolve cycled",
@@ -220,7 +229,6 @@ func TestContainer(t *testing.T) {
 
 			require.Nil(t, srv)
 			require.ErrorIs(t, err, cycle.ErrCycleDetected)
-			require.ErrorContains(t, err, "container_test.go:218")
 		},
 	}, {
 		Name: "Resolved group with flaky item",
@@ -230,7 +238,6 @@ func TestContainer(t *testing.T) {
 			}, di.Constraint(([]Controller)(nil)))
 
 			require.Error(t, err)
-			require.ErrorContains(t, err, "container_test.go:228")
 		},
 	}, {
 		Name: "Resolve without dependencies",

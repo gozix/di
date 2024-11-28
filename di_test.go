@@ -30,6 +30,10 @@ type (
 	FlakyController struct {
 		_ int
 	}
+
+	Item int
+
+	Items []Item
 )
 
 func (c *BarController) Register(srv *http.ServeMux) {
@@ -88,4 +92,16 @@ func NewFlakyController() (*FlakyController, error) {
 
 func NewCycledController(cycled *CycledController) *CycledController {
 	return cycled
+}
+
+func NewSlice1() []Item {
+	return []Item{4, 5}
+}
+
+func NewSlice2() []Item {
+	return []Item{6, 7}
+}
+
+func NewNamedSlice() Items {
+	return Items{1, 2, 3}
 }
