@@ -8,6 +8,8 @@ import (
 	"errors"
 	"io"
 	"net/http"
+
+	"github.com/gozix/di"
 )
 
 type (
@@ -34,6 +36,11 @@ type (
 	Item int
 
 	Items []Item
+
+	ManualResolver struct {
+		bar *BarController
+		baz *BazController
+	}
 )
 
 func (c *BarController) Register(srv *http.ServeMux) {
@@ -104,4 +111,16 @@ func NewSlice2() []Item {
 
 func NewNamedSlice() Items {
 	return Items{1, 2, 3}
+}
+
+func NewManualResolver(ctn di.Container, bar *BarController) (*ManualResolver, error) {
+	var baz *BazController
+	if err := ctn.Resolve(&baz); err != nil {
+		return nil, err
+	}
+
+	return &ManualResolver{
+		bar: bar,
+		baz: baz,
+	}, nil
 }

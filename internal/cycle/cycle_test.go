@@ -12,23 +12,12 @@ import (
 )
 
 func TestCycle(t *testing.T) {
-	var (
-		cl  = cycle.New()
-		err error
-	)
+	var cl = cycle.New()
 
-	require.NotPanics(t, func() {
-		cl.Del(1)
-	})
+	require.False(t, cl.Has(1))
 
-	err = cl.Add(1)
-	require.NoError(t, err)
+	var c2 = cl.Append(1)
 
-	err = cl.Add(1)
-	require.Error(t, err)
-	require.ErrorIs(t, err, cycle.ErrCycleDetected)
-
-	cl.Del(1)
-	err = cl.Add(1)
-	require.NoError(t, err)
+	require.False(t, cl.Has(1))
+	require.True(t, c2.Has(1))
 }

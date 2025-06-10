@@ -172,6 +172,9 @@ var (
 	// ErrorMustBeFunction triggered when value not a function.
 	ErrorMustBeFunction = errors.New("must be a function")
 
+	// ErrCycleDetected is error triggered when was cycle detected.
+	ErrCycleDetected = errors.New("cycle detected")
+
 	// ErrInvalidConstructor is error triggered when constructor have invalid signature.
 	ErrInvalidConstructor = compiler.ErrInvalidConstructor
 

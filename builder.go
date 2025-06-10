@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/gozix/di/internal/compiler"
+	"github.com/gozix/di/internal/cycle"
 	"github.com/gozix/di/internal/runtime"
 )
 
@@ -100,8 +101,11 @@ func (b *builder) Build() (Container, error) {
 	}
 
 	return &container{
-		defs:  defs,
-		cache: cache{},
+		containerCore: &containerCore{
+			defs:  defs,
+			cache: make(cache),
+		},
+		cycle: cycle.New(),
 	}, nil
 }
 
