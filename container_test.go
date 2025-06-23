@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	"github.com/gozix/di"
-	"github.com/gozix/di/internal/cycle"
 
 	"github.com/stretchr/testify/require"
 )
@@ -51,6 +50,8 @@ func NewContainer() (di.Container, error) {
 		di.Provide(NewSlice1),
 		di.Provide(NewSlice2),
 		di.Provide(NewNamedSlice),
+
+		di.Provide(NewManualResolver),
 	)
 
 	if err != nil {
@@ -228,7 +229,7 @@ func TestContainer(t *testing.T) {
 			)
 
 			require.Nil(t, srv)
-			require.ErrorIs(t, err, cycle.ErrCycleDetected)
+			require.ErrorIs(t, err, di.ErrCycleDetected)
 		},
 	}, {
 		Name: "Resolved group with flaky item",
@@ -332,6 +333,17 @@ func TestContainer(t *testing.T) {
 			require.NoError(t, err)
 			require.NotNil(t, container)
 			require.Same(t, ctn, container)
+		},
+	}, {
+		Name: "Call with Resolver",
+		Run: func(t *testing.T, ctn di.Container) {
+			var err = ctn.Call(func(mr *ManualResolver) {
+				require.NotNil(t, mr)
+				require.NotNil(t, mr.bar)
+				require.NotNil(t, mr.baz)
+			})
+
+			require.NoError(t, err)
 		},
 	}}
 
