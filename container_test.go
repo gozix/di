@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/gozix/di"
 
@@ -357,5 +358,131 @@ func TestContainer(t *testing.T) {
 			err = c.Close()
 			require.NoError(t, err)
 		})
+	}
+}
+
+func TestContainerResolveConcurrentSharedDefinition(t *testing.T) {
+	var ctn, err = NewContainer()
+	require.NoError(t, err)
+
+	t.Cleanup(func() {
+		require.NoError(t, ctn.Close())
+	})
+
+	const goroutines = 64
+
+	var (
+		start = make(chan struct{})
+		done  = make(chan struct{}, goroutines)
+		errs  = make([]error, goroutines)
+		muxes = make([]*http.ServeMux, goroutines)
+	)
+
+	for i := 0; i < goroutines; i++ {
+		var i = i
+		go func() {
+			defer func() { done <- struct{}{} }()
+
+			<-start
+			errs[i] = ctn.Resolve(&muxes[i])
+		}()
+	}
+
+	close(start)
+
+	for i := 0; i < goroutines; i++ {
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("goroutine %d did not finish resolving within the timeout", i)
+		}
+	}
+
+	for i, err := range errs {
+		require.NoErrorf(t, err, "goroutine %d", i)
+		require.NotNilf(t, muxes[i], "goroutine %d", i)
+		require.Samef(t, muxes[0], muxes[i], "goroutine %d resolved a different *http.ServeMux instance", i)
+	}
+}
+
+type failingThing struct{}
+
+func newFailingThing() (*failingThing, error) {
+	return nil, errors.New("boom")
+}
+
+func TestContainerResolveSharedDefinitionFailsThenRetries(t *testing.T) {
+	var builder, err = di.NewBuilder(di.Provide(newFailingThing))
+	require.NoError(t, err)
+
+	var ctn di.Container
+	ctn, err = builder.Build()
+	require.NoError(t, err)
+
+	t.Cleanup(func() {
+		require.NoError(t, ctn.Close())
+	})
+
+	for attempt := 1; attempt <= 2; attempt++ {
+		var (
+			thing *failingThing
+			done  = make(chan error, 1)
+		)
+
+		go func() { done <- ctn.Resolve(&thing) }()
+
+		select {
+		case err := <-done:
+			require.Errorf(t, err, "attempt %d", attempt)
+			require.Nilf(t, thing, "attempt %d", attempt)
+		case <-time.After(5 * time.Second):
+			t.Fatalf("attempt %d: Resolve hung instead of returning the constructor error", attempt)
+		}
+	}
+}
+
+func TestContainerResolveSharedDefinitionFailsConcurrentWaiters(t *testing.T) {
+	var builder, err = di.NewBuilder(di.Provide(newFailingThing))
+	require.NoError(t, err)
+
+	var ctn di.Container
+	ctn, err = builder.Build()
+	require.NoError(t, err)
+
+	t.Cleanup(func() {
+		require.NoError(t, ctn.Close())
+	})
+
+	const goroutines = 32
+
+	var (
+		start = make(chan struct{})
+		done  = make(chan struct{}, goroutines)
+		errs  = make([]error, goroutines)
+	)
+
+	for i := 0; i < goroutines; i++ {
+		var i = i
+		go func() {
+			defer func() { done <- struct{}{} }()
+
+			var thing *failingThing
+			<-start
+			errs[i] = ctn.Resolve(&thing)
+		}()
+	}
+
+	close(start)
+
+	for i := 0; i < goroutines; i++ {
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("goroutine %d did not finish resolving within the timeout", i)
+		}
+	}
+
+	for i, err := range errs {
+		require.Errorf(t, err, "goroutine %d", i)
 	}
 }

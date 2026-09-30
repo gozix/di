@@ -41,6 +41,7 @@ type (
 	// container cache item
 	cacheItem struct {
 		value reflect.Value
+		err   error
 		ready chan struct{}
 	}
 )
@@ -198,22 +199,27 @@ func (r *resolver) resolve(ctn *container, tv *reflect.Value, modifiers []Modifi
 			return NewTypeError(tv.Type(), ErrCycleDetected)
 		}
 
+		var owned *cacheItem
 		if !def.unshared {
 			ctn.mux.Lock()
 			var dep, ok = ctn.cache[def.id]
+			if !ok {
+				dep = &cacheItem{ready: make(chan struct{})}
+				ctn.cache[def.id] = dep
+			}
 			ctn.mux.Unlock()
 
 			if ok {
 				<-dep.ready
+				if dep.err != nil {
+					return dep.err
+				}
+
 				r.set(tv, dep.value)
 				continue
 			}
 
-			ctn.mux.Lock()
-			ctn.cache[def.id] = &cacheItem{
-				ready: make(chan struct{}),
-			}
-			ctn.mux.Unlock()
+			owned = dep
 		}
 
 		var deps = def.compiler.Dependencies()
@@ -224,20 +230,21 @@ func (r *resolver) resolve(ctn *container, tv *reflect.Value, modifiers []Modifi
 			}
 
 			if err = r.resolveDependency(newCtn, dep, def.constraints); err != nil {
+				ctn.abandon(def.id, owned, err)
 				return err
 			}
 		}
 
 		var sv, closer, err = def.compiler.Create(deps...)
 		if err != nil {
-			return NewTypeError(def.compiler.Type(), err)
+			err = NewTypeError(def.compiler.Type(), err)
+			ctn.abandon(def.id, owned, err)
+			return err
 		}
 
-		if !def.unshared {
-			ctn.mux.Lock()
-			ctn.cache[def.id].value = sv
-			close(ctn.cache[def.id].ready)
-			ctn.mux.Unlock()
+		if owned != nil {
+			owned.value = sv
+			close(owned.ready)
 		}
 
 		if closer != nil {
@@ -250,6 +257,21 @@ func (r *resolver) resolve(ctn *container, tv *reflect.Value, modifiers []Modifi
 	}
 
 	return nil
+}
+
+func (ctn *container) abandon(id int, owned *cacheItem, err error) {
+	if owned == nil {
+		return
+	}
+
+	owned.err = err
+	close(owned.ready)
+
+	ctn.mux.Lock()
+	if ctn.cache[id] == owned {
+		delete(ctn.cache, id)
+	}
+	ctn.mux.Unlock()
 }
 
 func (r *resolver) resolveDependency(ctn *container, dep *compiler.Dependency, cs constraints) error {
